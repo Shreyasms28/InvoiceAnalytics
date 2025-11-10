@@ -39,9 +39,10 @@ router.post('/', async (req, res) => {
     
     // Check if it's an axios error with response
     if (error.response) {
+      const data = error.response.data;
       return res.status(error.response.status).json({
         error: 'Vanna AI service error',
-        message: error.response.data?.error || error.message
+        message: data?.detail || data?.error || data?.message || error.message
       });
     }
 

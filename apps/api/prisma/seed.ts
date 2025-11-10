@@ -33,7 +33,8 @@ function generateSampleData() {
   const statuses = ['paid', 'pending', 'overdue'];
 
   const invoices = [];
-  const startDate = new Date('2023-01-01');
+  const currentYear = new Date().getFullYear();
+  const startDate = new Date(currentYear, 0, 1);
 
   for (let i = 0; i < 50; i++) {
     const vendor = vendors[Math.floor(Math.random() * vendors.length)];
@@ -66,7 +67,7 @@ function generateSampleData() {
     const status = statuses[Math.floor(Math.random() * statuses.length)];
 
     invoices.push({
-      invoiceNumber: `INV-2024-${String(i + 1).padStart(5, '0')}`,
+      invoiceNumber: `INV-${currentYear}-${String(i + 1).padStart(5, '0')}`,
       vendor: { name: vendor, email: `contact@${vendor.toLowerCase().replace(/\s+/g, '')}.com` },
       customer: { name: customer, email: `billing@${customer.toLowerCase().replace(/\s+/g, '')}.com` },
       issueDate: issueDate.toISOString(),
@@ -101,10 +102,65 @@ async function main() {
       console.log(`📂 Reading data from: ${dataFilePath}`);
       const fileContent = fs.readFileSync(dataFilePath, 'utf-8');
       const jsonData = JSON.parse(fileContent);
-      
-      // Handle both array and object with invoices property
-      invoicesData = Array.isArray(jsonData) ? jsonData : jsonData.invoices || [];
-      console.log(`✅ Found ${invoicesData.length} invoices in file\n`);
+
+      // If the JSON is already in expected array/object form, use it
+      let rawArray: any[] = Array.isArray(jsonData) ? jsonData : (jsonData.invoices || []);
+
+      // Detect user's nested structure and adapt if necessary
+      const looksNested = rawArray.length > 0 && rawArray[0]?.extractedData?.llmData;
+      if (looksNested) {
+        console.log('🔄 Detected nested llmData structure. Adapting to seed format...');
+        const safeGet = (obj: any, path: string[], def: any = null) => {
+          try {
+            return path.reduce((o, k) => (o && k in o ? o[k] : undefined), obj) ?? def;
+          } catch {
+            return def;
+          }
+        };
+
+        rawArray = rawArray.map((item) => {
+          const llm = item.extractedData.llmData;
+
+          const invoiceId = safeGet(llm, ['invoice', 'value', 'invoiceId', 'value'], undefined) || `INV-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+          const issueDateStr = safeGet(llm, ['invoice', 'value', 'invoiceDate', 'value'], new Date().toISOString());
+          const issueDate = new Date(issueDateStr);
+          const dueDate = new Date(issueDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+          const vendorName = safeGet(llm, ['vendor', 'value', 'vendorName', 'value'], 'Unknown Vendor');
+          const customerName = safeGet(llm, ['customer', 'value', 'customerName', 'value'], 'Unknown Customer');
+
+          const subTotal = Math.abs(Number(safeGet(llm, ['summary', 'value', 'subTotal', 'value'], 0))) || 0;
+          const totalTax = Math.abs(Number(safeGet(llm, ['summary', 'value', 'totalTax', 'value'], 0))) || 0;
+          const invoiceTotal = Math.abs(Number(safeGet(llm, ['summary', 'value', 'invoiceTotal', 'value'], subTotal + totalTax))) || 0;
+
+          const itemsArr = safeGet(llm, ['lineItems', 'value', 'items', 'value'], []) as any[];
+          const mappedItems = Array.isArray(itemsArr) ? itemsArr.map((li) => ({
+            category: safeGet(li, ['Sachkonto', 'value'], null) ? 'General' : null,
+            description: safeGet(li, ['description', 'value'], 'Item'),
+            quantity: Number(safeGet(li, ['quantity', 'value'], 1)) || 1,
+            unitPrice: Number(safeGet(li, ['unitPrice', 'value'], 0)) || 0,
+            amount: Number(safeGet(li, ['totalPrice', 'value'], 0)) || 0,
+          })) : [];
+
+          return {
+            invoiceNumber: String(invoiceId),
+            vendor: { name: vendorName, email: null },
+            customer: { name: customerName, email: null },
+            issueDate: issueDate.toISOString(),
+            dueDate: dueDate.toISOString(),
+            status: 'pending',
+            subtotal: subTotal || mappedItems.reduce((s, it) => s + (it.amount || 0), 0),
+            tax: totalTax,
+            total: invoiceTotal,
+            currency: 'EUR',
+            lineItems: mappedItems,
+            payments: [],
+          };
+        });
+      }
+
+      invoicesData = rawArray;
+      console.log(`✅ Prepared ${invoicesData.length} invoices from file\n`);
     } else {
       console.log(`⚠️  Data file not found at ${dataFilePath}`);
       console.log('📝 Generating sample data instead...\n');

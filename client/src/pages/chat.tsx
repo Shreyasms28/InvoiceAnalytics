@@ -32,7 +32,8 @@ export default function ChatWithData() {
   // Mutation to send query to backend (which proxies to Vanna)
   const chatMutation = useMutation({
     mutationFn: async (userQuery: string) => {
-      return await apiRequest('POST', '/api/chat-with-data', { query: userQuery });
+      const res = await apiRequest('POST', '/api/chat-with-data', { query: userQuery });
+      return await res.json();
     },
     onSuccess: (data, userQuery) => {
       // Add successful response to messages
@@ -197,6 +198,8 @@ export default function ChatWithData() {
         <div className="max-w-4xl mx-auto">
           <form onSubmit={handleSubmit} className="relative">
             <Textarea
+              id="chat-query"
+              name="query"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ask a question about your invoices... (e.g., 'Show me vendors with unpaid invoices')"

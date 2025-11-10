@@ -25,6 +25,7 @@ import psycopg
 from typing import List, Dict, Any
 import httpx
 from dotenv import load_dotenv
+import traceback
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
@@ -52,6 +53,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions")
 MAX_ROWS = int(os.getenv("MAX_ROWS", "100"))
 ALLOWED_TABLES = os.getenv("ALLOWED_TABLES", "invoices,vendors,customers,categories,line_items,payments").split(",")
+FALLBACK_ENABLED = os.getenv("FALLBACK_ENABLED", "true").lower() in ("1", "true", "yes", "on")
 
 # Thread pool for blocking database operations
 executor = ThreadPoolExecutor(max_workers=5)
@@ -66,20 +68,21 @@ class QueryResponse(BaseModel):
 # SQL prompt template for Groq
 SQL_PROMPT_TEMPLATE = """You are a SQL expert. Convert the following natural language query into a PostgreSQL SQL query.
 
-Database Schema:
+Database Schema (tables are snake_case, columns are camelCase to match the actual database):
 - vendors (id, name, email, phone, address)
 - customers (id, name, email, phone, address)
-- invoices (id, invoice_number, vendor_id, customer_id, issue_date, due_date, status, subtotal, tax, total, currency, notes)
-- line_items (id, invoice_id, category_id, description, quantity, unit_price, amount)
+- invoices (id, invoiceNumber, vendorId, customerId, issueDate, dueDate, status, subtotal, tax, total, currency, notes)
+- line_items (id, invoiceId, categoryId, description, quantity, unitPrice, amount)
 - categories (id, name)
-- payments (id, invoice_id, amount, payment_date, method, reference)
+- payments (id, invoiceId, amount, paymentDate, method, reference)
 
 Important rules:
 1. ONLY generate SELECT statements (no INSERT, UPDATE, DELETE, DROP, etc.)
-2. Use proper PostgreSQL syntax with snake_case column names (e.g., invoice_number not invoiceNumber)
-3. Use appropriate JOINs when querying related tables
-4. Include ORDER BY and LIMIT clauses when appropriate
-5. Return ONLY the SQL query, no explanations or markdown
+2. Use the exact column names shown above (camelCase), and the exact table names shown above (snake_case plural).
+3. DOUBLE-QUOTE all column names (e.g., "invoiceNumber", "vendorId") to preserve camelCase in PostgreSQL. Do NOT quote table names.
+4. Use appropriate JOINs when querying related tables
+5. Include ORDER BY and LIMIT clauses when appropriate
+6. Return ONLY the SQL query, no explanations or markdown
 
 Natural language query: {query}
 
@@ -110,10 +113,17 @@ def validate_sql(sql: str) -> bool:
             raise ValueError(f"Keyword '{keyword}' is not allowed")
     
     # Verify only allowed tables are referenced
-    # This is a simple check - a more robust solution would parse the SQL AST
-    for match in re.finditer(r'\bFROM\s+(\w+)|\bJOIN\s+(\w+)', sql_upper):
-        table = match.group(1) or match.group(2)
-        if table.lower() not in ALLOWED_TABLES:
+    # Support schema-qualified names (e.g., public.invoices), quoted identifiers, and aliases
+    table_pattern = re.compile(r'\bFROM\s+([A-Z0-9_\."]+)|\bJOIN\s+([A-Z0-9_\."]+)', re.IGNORECASE)
+    for match in table_pattern.finditer(sql_upper):
+        raw = match.group(1) or match.group(2) or ""
+        # take the first token before whitespace
+        token = raw.strip().split()[0]
+        # remove surrounding quotes
+        token = token.replace('"', '')
+        # if schema-qualified, take the last segment
+        table = token.split('.')[-1]
+        if table.lower() not in [t.strip().lower() for t in ALLOWED_TABLES]:
             raise ValueError(f"Table '{table}' is not in the allowed list: {ALLOWED_TABLES}")
     
     return True
@@ -135,7 +145,7 @@ async def generate_sql_with_groq(query: str) -> str:
                 "Content-Type": "application/json"
             },
             json={
-                "model": "llama3-70b-8192",  # Groq's high-performance model
+                "model": "llama-3.1-70b-versatile",
                 "messages": [
                     {"role": "system", "content": "You are a SQL expert that converts natural language to PostgreSQL queries."},
                     {"role": "user", "content": prompt}
@@ -158,6 +168,28 @@ async def generate_sql_with_groq(query: str) -> str:
         
         return sql
 
+def generate_fallback_sql(nl_query: str) -> str | None:
+    """Very simple intent matcher that returns known-good SQL for common queries.
+    Columns are camelCase and must be double-quoted.
+    Tables are snake_case.
+    Returns None if no fallback applies.
+    """
+    q = (nl_query or "").lower()
+    # Top vendors by spend
+    if ("top" in q and "vendor" in q and ("spend" in q or "total" in q)) or (
+        "top 5 vendors" in q
+    ):
+        return (
+            'SELECT v.name AS "vendor", SUM(i."total") AS "total"\n'
+            'FROM invoices i\n'
+            'JOIN vendors v ON v.id = i."vendorId"\n'
+            "WHERE i.status <> 'cancelled'\n"
+            'GROUP BY v.name\n'
+            'ORDER BY "total" DESC\n'
+            'LIMIT 5'
+        )
+    return None
+
 def execute_sql_sync(sql: str) -> List[Dict[str, Any]]:
     """
     Execute SQL query synchronously (runs in thread pool)
@@ -169,10 +201,9 @@ def execute_sql_sync(sql: str) -> List[Dict[str, Any]]:
     
     # Connect and execute
     with psycopg.connect(DATABASE_URL) as conn:
-        # Set transaction to read-only
-        conn.execute("SET TRANSACTION READ ONLY")
-        
         with conn.cursor() as cur:
+            # Start an explicit read-only transaction
+            cur.execute("BEGIN READ ONLY")
             cur.execute(sql)
             
             # Get column names
@@ -216,8 +247,21 @@ async def query_data(request: QueryRequest):
     Main endpoint: Convert natural language to SQL, validate, execute, return results
     """
     try:
-        # Step 1: Generate SQL using Groq
-        sql = await generate_sql_with_groq(request.query)
+        # Step 1: Generate SQL (Groq or fallback)
+        sql: str
+        try:
+            sql = await generate_sql_with_groq(request.query)
+        except Exception as groq_err:
+            if FALLBACK_ENABLED:
+                fb = generate_fallback_sql(request.query)
+                if fb:
+                    sql = fb
+                else:
+                    # No fallback matched; rethrow for proper error to client
+                    raise groq_err
+            else:
+                raise groq_err
+        print("Generated SQL:", sql)
         
         # Step 2: Validate SQL for safety
         validate_sql(sql)
@@ -229,10 +273,16 @@ async def query_data(request: QueryRequest):
         return QueryResponse(sql=sql, rows=rows)
         
     except ValueError as e:
+        print("Validation error:", traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Validation error: {str(e)}")
     except psycopg.Error as e:
+        print("Database error:", traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Database error: {str(e)}")
     except Exception as e:
+        # If it's already an HTTPException (e.g., Groq error bubbled up), re-raise as-is
+        if isinstance(e, HTTPException):
+            raise e
+        print("Internal error:", traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 # Alternative: Using asyncpg instead of psycopg (for Linux/production)
