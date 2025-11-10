@@ -1,0 +1,83 @@
+You are an expert full-stack engineer. Create a production-grade monorepo named **QualityAnalytics** that implements an invoice analytics product with two modules: (A) an interactive analytics dashboard (pixel-accurate to a provided Figma) and (B) a “Chat with Data” interface powered by a self-hosted Vanna AI service that uses Groq to generate SQL.
+
+Please scaffold the whole project and produce runnable code inside Replit that I can run locally. Follow these strict requirements:
+
+STACK & LAYOUT
+- Monorepo using npm workspaces:
+  - package.json at repo root that declares workspaces: ["apps/*"]
+- Apps:
+  - apps/web — Next.js (App Router) in TypeScript, TailwindCSS, shadcn/ui compatible.
+  - apps/api — Node.js TypeScript backend (Express or Next API routes). Use Express.
+  - vanna — Python FastAPI app (Vanna AI proxy that calls Groq and executes SQL).
+- ORM: Prisma for PostgreSQL (schema in apps/api/prisma/schema.prisma).
+- Database: PostgreSQL (local). Include instructions for connecting and seeding via Prisma.
+- Charts: Chart.js (react-chartjs-2).
+- Ensure CORS enabled where necessary.
+
+FILES, CODE & FEATURES TO CREATE
+- Root package.json + README with one-line start instructions.
+- apps/web:
+  - next.config.ts with rewrites proxying /api/* → http://localhost:4000/api/:path*.
+  - Tailwind and PostCSS setup.
+  - App layout with sidebar tabs: "Dashboard" and "Chat with Data".
+  - Dashboard route at '/' with Overview cards (Total Spend YTD, Total Invoices Processed, Documents Uploaded, Avg Invoice), charts (Invoice trend line with dual axis, Spend by vendor horizontal bar top10, Category pie, Cash outflow bar), and invoices table (searchable/sortable/paginated).
+  - Chat route at '/chat' (client component) with simple chat UI: prompt input, streaming response area, generated SQL panel, results table.
+  - Components directory for OverviewCards, InvoiceTrendChart, VendorBarChart, CategoryPieChart, InvoiceTable and Chat components. Include comments explaining key code lines.
+  - Use axios for API calls. Charts must pass `options` and be wrapped in fixed-height containers (maintainAspectRatio: false).
+- apps/api:
+  - package.json with scripts: dev (ts-node-dev), build, seed, prisma:generate.
+  - tsconfig.json with rootDir configured so prisma/seed.ts can be run.
+  - Prisma schema that models Vendor, Invoice, LineItem, Payment, Customer, Category with clear relations and types.
+  - src/index.ts: Express server listening on PORT env (default 4000), CORS, JSON body parsing, router mounting.
+  - src/routes/*.ts for the endpoints:
+    - GET /api/stats
+    - GET /api/invoice-trends
+    - GET /api/vendors/top10
+    - GET /api/category-spend
+    - GET /api/cash-outflow
+    - GET /api/invoices (filters: q, status, dateFrom, dateTo, limit, offset)
+    - POST /api/chat-with-data — proxies to Vanna (VANNA_AI_URL env)
+  - prisma/seed.ts that reads `apps/api/prisma/data/Analytics_Test_Data.json`, normalizes nested JSON into the relational schema with upserts, and writes to DB. Use ts-node in npm script for seeding. Provide helpful console logs and defensive error handling.
+  - Provide .env.example listing DATABASE_URL, VANNA_AI_URL, PORT, DATA_FILE_PATH.
+- vanna:
+  - Python FastAPI app that exposes POST /query and does:
+    - Accepts {"query": "..."}.
+    - Calls Groq using GROQ_API_KEY (env) to request SQL (provide a robust prompt template).
+    - Validate SQL: only allow SELECT, no semicolons, enforce ALLOWED_TABLES and MAX_ROWS.
+    - Execute SQL on PostgreSQL using psycopg (psycopg[binary]) inside a threadpool and return {"sql": "...", "rows": [...]}
+  - Provide venv setup instructions and a .env.example (DATABASE_URL, GROQ_API_KEY, GROQ_API_URL, MAX_ROWS, ALLOWED_TABLES, CORS_ORIGINS).
+  - Include CORS and docs (/docs) route.
+  - Provide a fallback implementation comment showing how to swap to asyncpg if running on Linux.
+
+DATA
+- Add a placeholder path and instructions: `apps/api/prisma/data/Analytics_Test_Data.json` (I will upload file manually to that path). Provide the seed script that references env var DATA_FILE_PATH.
+
+RUN & DEBUG INSTRUCTIONS (exact commands)
+- From repo root:
+  1. `npm install` (installs root and workspace packages)
+  2. `cd apps/api && npm install && npm run prisma:generate`
+  3. Create DB and set `DATABASE_URL` in apps/api/.env. For local Postgres example:
+     `DATABASE_URL="postgresql://postgres:yourpassword@localhost:5432/invoice_analytics?schema=public"`
+  4. `cd apps/api && npx prisma migrate dev --name init` (or `npx prisma db push`)
+  5. Place `Analytics_Test_Data.json` at `apps/api/prisma/data/Analytics_Test_Data.json`
+  6. `cd apps/api && npm run seed` (or `npx ts-node prisma/seed.ts`)
+  7. Start API: `cd apps/api && npm run dev` (PORT 4000)
+  8. Start Vanna: `cd vanna && python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt && uvicorn app:app --reload --port 8000`
+  9. Start Web: `cd apps/web && npm install && npm run dev` (Next dev on 3000)
+- Include commands to test endpoints:
+  - `curl http://localhost:4000/api/stats`
+  - `curl -X POST http://localhost:4000/api/chat-with-data -H "Content-Type: application/json" -d '{"query":"List top 5 vendors by spend"}'`
+
+DOCUMENTATION & COMMENTS
+- Add inline comments in all source files explaining why code exists (esp. seed, prisma models, sql safety in Vanna, and chart options).
+- Add README at repo root summarizing architecture, env vars, how to run, and where to put the Analytics JSON file.
+- Provide short troubleshooting tips for common Windows issues (psycopg vs asyncpg; venv activation; Visual C++ build tools).
+
+DELIVERABLE FORMAT FOR REPLIT
+- Create files exactly as described; ensure the project boots inside Replit VM (Postgres may not run inside Replit sandbox, so include clear instructions for either using a remote Postgres connection string (e.g., ElephantSQL) OR running locally via `localhost` when I clone locally).
+- If Replit cannot run PostgreSQL, create a fallback: a small `sqlite`-backed seed path and a toggle env `USE_SQLITE=true` to let me test UI locally in Replit; but include the real PostgreSQL path and seed script for local dev.
+
+Output:
+- Provide the project files, and a final message listing the single commands to run in sequence to get the full app online locally (same as above), and note which commands to run inside separate terminals.
+
+Be precise, produce working code, and add helpful comments and small debugging tips. End with: "Done — project scaffolded. Run the commands above to start everything locally."
