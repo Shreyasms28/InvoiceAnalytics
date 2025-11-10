@@ -4,6 +4,8 @@
     { "src": "api/**.ts", "use": "@vercel/node" }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "/api/[...all].ts" }
+    { "src": "^/api/health$", "dest": "/api/health.ts" },
+    { "src": "^/api/.*$", "dest": "/api/[...all].ts" },
+    { "src": "^/health$", "dest": "/api/[...all].ts" }
   ]
 }
