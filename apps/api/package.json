@@ -1,0 +1,31 @@
+{
+  "name": "@quality-analytics/api",
+  "version": "1.0.0",
+  "description": "Express API with Prisma for QualityAnalytics",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:push": "prisma db push",
+    "seed": "ts-node prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0",
+    "express": "^4.21.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "axios": "^1.7.9"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.17",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "prisma": "^6.1.0"
+  }
+}

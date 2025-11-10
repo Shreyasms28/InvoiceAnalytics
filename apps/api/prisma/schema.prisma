@@ -1,0 +1,114 @@
+// Prisma schema for QualityAnalytics invoice management system
+// Models: Vendor, Customer, Category, Invoice, LineItem, Payment
+// This schema normalizes the nested JSON structure into a relational database
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Vendor represents companies/suppliers that send invoices
+model Vendor {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime  @default(now())
+  invoices  Invoice[]
+
+  @@map("vendors")
+}
+
+// Customer represents the business receiving invoices
+model Customer {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime  @default(now())
+  invoices  Invoice[]
+
+  @@map("customers")
+}
+
+// Category for categorizing line items (e.g., "Office Supplies", "Software")
+model Category {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  lineItems LineItem[]
+
+  @@map("categories")
+}
+
+// Invoice is the main entity tracking payment obligations
+model Invoice {
+  id             String     @id @default(uuid())
+  invoiceNumber  String     @unique
+  vendorId       String
+  customerId     String
+  issueDate      DateTime
+  dueDate        DateTime
+  status         String     // "pending", "paid", "overdue", "cancelled"
+  subtotal       Float
+  tax            Float      @default(0)
+  total          Float
+  currency       String     @default("USD")
+  notes          String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  
+  // Relations
+  vendor         Vendor     @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  customer       Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  lineItems      LineItem[]
+  payments       Payment[]
+
+  @@index([vendorId])
+  @@index([customerId])
+  @@index([status])
+  @@index([issueDate])
+  @@map("invoices")
+}
+
+// LineItem represents individual items/services on an invoice
+model LineItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  categoryId  String?
+  description String
+  quantity    Float
+  unitPrice   Float
+  amount      Float    // quantity * unitPrice
+  
+  // Relations
+  invoice     Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([categoryId])
+  @@map("line_items")
+}
+
+// Payment tracks payments made against invoices
+model Payment {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  amount      Float
+  paymentDate DateTime
+  method      String   // "credit_card", "bank_transfer", "check", "cash"
+  reference   String?  // payment reference number
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([paymentDate])
+  @@map("payments")
+}
