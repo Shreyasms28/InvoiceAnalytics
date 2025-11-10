@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
     // Group by month
     const monthlyData = new Map<string, { amount: number; count: number }>();
 
-    invoices.forEach(invoice => {
+    invoices.forEach((invoice: { issueDate: Date; total: number }) => {
       const monthKey = `${invoice.issueDate.getFullYear()}-${String(invoice.issueDate.getMonth() + 1).padStart(2, '0')}`;
       
       if (!monthlyData.has(monthKey)) {

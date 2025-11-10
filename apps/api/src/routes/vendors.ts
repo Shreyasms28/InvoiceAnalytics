@@ -28,7 +28,7 @@ router.get('/top10', async (req, res) => {
     // Aggregate by vendor
     const vendorTotals = new Map<string, { name: string; total: number }>();
 
-    invoices.forEach(invoice => {
+    invoices.forEach((invoice: { vendorId: string; vendor: { name: string }; total: number }) => {
       const vendorId = invoice.vendorId;
       if (!vendorTotals.has(vendorId)) {
         vendorTotals.set(vendorId, {

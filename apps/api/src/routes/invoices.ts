@@ -12,7 +12,7 @@
  */
 
 import { Router } from 'express';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -28,10 +28,8 @@ router.get('/', async (req, res) => {
       offset = '0'
     } = req.query;
 
-    // Build where clause
-    const where: Prisma.InvoiceWhereInput = {
-      AND: []
-    };
+    // Build where clause (avoid Prisma-specific input types for serverless build)
+    const where: any = { AND: [] };
 
     // Search filter (invoice number or vendor name)
     if (q) {
@@ -48,7 +46,7 @@ router.get('/', async (req, res) => {
 
     // Date range filter
     if (dateFrom || dateTo) {
-      where.issueDate = {};
+      where.issueDate = where.issueDate || {};
       if (dateFrom) {
         where.issueDate.gte = new Date(dateFrom as string);
       }

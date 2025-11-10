@@ -23,7 +23,7 @@ router.get('/', async (req, res) => {
     // Aggregate by category
     const categoryTotals = new Map<string, number>();
 
-    lineItems.forEach(item => {
+    lineItems.forEach((item: { category: { name: string } | null; amount: number }) => {
       const categoryName = item.category?.name || 'Uncategorized';
       categoryTotals.set(
         categoryName,
