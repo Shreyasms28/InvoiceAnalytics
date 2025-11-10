@@ -47,4 +47,5 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   });
 });
 
+export { app };
 export default app;
