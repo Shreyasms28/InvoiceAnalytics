@@ -38,7 +38,7 @@ router.get('/', async (req, res) => {
     // Group by month
     const monthlyOutflow = new Map<string, number>();
 
-    invoices.forEach(invoice => {
+    invoices.forEach((invoice: { dueDate: Date; total: number }) => {
       const monthKey = `${invoice.dueDate.getFullYear()}-${String(invoice.dueDate.getMonth() + 1).padStart(2, '0')}`;
       monthlyOutflow.set(
         monthKey,
