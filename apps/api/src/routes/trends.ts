@@ -14,80 +14,37 @@ const prisma = new PrismaClient();
 
 router.get('/', async (req, res) => {
   try {
-    // Get invoices from the last 12 months (inclusive of current month)
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setUTCMonth(twelveMonthsAgo.getUTCMonth() - 12);
+    // basis can be 'issue' (default) or 'due'
+    const basis = (String(req.query.basis || 'issue').toLowerCase() === 'due') ? 'dueDate' : 'issueDate';
 
-    const invoices = await prisma.invoice.findMany({
-      where: {
-        issueDate: {
-          gte: twelveMonthsAgo
-        },
-        status: {
-          not: 'cancelled'
-        }
-      },
-      select: {
-        issueDate: true,
-        total: true
-      },
-      orderBy: {
-        issueDate: 'asc'
-      }
-    });
+    // Use Postgres to build a 12-month series and left join invoices by selected basis
+    const rows: Array<{ label: string; amount: number; count: number }> = await prisma.$queryRawUnsafe(
+      `
+      WITH months AS (
+        SELECT date_trunc('month', CURRENT_DATE) - (interval '1 month' * gs.a) AS month
+        FROM generate_series(0, 11) AS gs(a)
+      )
+      SELECT to_char(m.month, 'Mon YYYY') AS label,
+             COALESCE(SUM(i."total"), 0) AS amount,
+             COUNT(i."id") AS count
+      FROM months m
+      LEFT JOIN "invoices" i
+        ON date_trunc('month', i."${basis}") = m.month
+       AND i."status" <> 'cancelled'
+      GROUP BY m.month
+      ORDER BY m.month;
+      `
+    );
 
-    // Prepare zero-filled last 12 months using UTC to avoid TZ drift
-    const monthlyData = new Map<string, { amount: number; count: number }>();
-    const now = new Date();
-    const months: string[] = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-      d.setUTCMonth(d.getUTCMonth() - i);
-      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-      months.push(key);
-      monthlyData.set(key, { amount: 0, count: 0 });
-    }
-
-    // Group invoices by UTC month
-    invoices.forEach((invoice: { issueDate: Date; total: number }) => {
-      const d = new Date(invoice.issueDate);
-      const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-      if (monthlyData.has(monthKey)) {
-        const data = monthlyData.get(monthKey)!;
-        data.amount += invoice.total;
-        data.count += 1;
-      }
-    });
-
-    // Convert to array format for Chart.js
-    const labels: string[] = [];
-    const amounts: number[] = [];
-    const counts: number[] = [];
-
-    // Keep predefined chronological order and format labels
-    months.forEach(monthKey => {
-      const [year, month] = monthKey.split('-');
-      const date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, 1));
-      labels.push(date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }));
-      
-      const data = monthlyData.get(monthKey)!;
-      amounts.push(Math.round(data.amount * 100) / 100);
-      counts.push(data.count);
-    });
+    const labels = rows.map(r => r.label);
+    const amounts = rows.map(r => Math.round(Number(r.amount) * 100) / 100);
+    const counts = rows.map(r => Number(r.count));
 
     res.json({
       labels,
       datasets: [
-        {
-          label: 'Total Amount',
-          data: amounts,
-          yAxisID: 'y-amount'
-        },
-        {
-          label: 'Invoice Count',
-          data: counts,
-          yAxisID: 'y-count'
-        }
+        { label: 'Total Amount', data: amounts, yAxisID: 'y-amount' },
+        { label: 'Invoice Count', data: counts, yAxisID: 'y-count' }
       ]
     });
   } catch (error) {

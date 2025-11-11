@@ -12,50 +12,33 @@ import { PrismaClient } from '@prisma/client';
 const router = Router();
 const prisma = new PrismaClient();
 
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
-    // Get next 6 months of invoices
-    const today = new Date();
-    const sixMonthsLater = new Date();
-    sixMonthsLater.setMonth(today.getMonth() + 6);
+    // Next 6 months (including current), due-based, pending/overdue only
+    const rows: Array<{ label: string; total: number }> = await prisma.$queryRawUnsafe(
+      `
+      WITH months AS (
+        SELECT date_trunc('month', CURRENT_DATE) + (interval '1 month' * gs.a) AS month
+        FROM generate_series(0, 5) AS gs(a)
+      )
+      SELECT to_char(m.month, 'Mon YYYY') AS label,
+             COALESCE(SUM(i."total" - COALESCE(paid.paid_amount, 0)), 0) AS total
+      FROM months m
+      LEFT JOIN "invoices" i
+        ON date_trunc('month', i."dueDate") = m.month
+       AND i."status" IN ('pending','overdue')
+      LEFT JOIN (
+        SELECT "invoiceId", COALESCE(SUM("amount"),0) AS paid_amount
+        FROM "payments"
+        GROUP BY "invoiceId"
+      ) paid ON paid."invoiceId" = i."id"
+      GROUP BY m.month
+      ORDER BY m.month;
+      `
+    );
 
-    const invoices = await prisma.invoice.findMany({
-      where: {
-        dueDate: {
-          gte: today,
-          lte: sixMonthsLater
-        },
-        status: {
-          in: ['pending', 'overdue']
-        }
-      },
-      select: {
-        dueDate: true,
-        total: true
-      }
-    });
-
-    // Group by month
-    const monthlyOutflow = new Map<string, number>();
-
-    invoices.forEach((invoice: { dueDate: Date; total: number }) => {
-      const monthKey = `${invoice.dueDate.getFullYear()}-${String(invoice.dueDate.getMonth() + 1).padStart(2, '0')}`;
-      monthlyOutflow.set(
-        monthKey,
-        (monthlyOutflow.get(monthKey) || 0) + invoice.total
-      );
-    });
-
-    // Convert to array format
-    const labels: string[] = [];
-    const data: number[] = [];
-
-    Array.from(monthlyOutflow.keys()).sort().forEach(monthKey => {
-      const [year, month] = monthKey.split('-');
-      const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-      labels.push(date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }));
-      data.push(Math.round(monthlyOutflow.get(monthKey)! * 100) / 100);
-    });
+    const labels = rows.map(r => r.label);
+    const data = rows.map(r => Math.round(Number(r.total) * 100) / 100);
 
     res.json({ labels, data });
   } catch (error) {
