@@ -1,3 +1,3 @@
-import app from '../apps/api/dist/app.js';
+import app from '../apps/api/dist/src/app.js';
 
 export default app as any;
