@@ -14,9 +14,9 @@ const prisma = new PrismaClient();
 
 router.get('/', async (req, res) => {
   try {
-    // Get invoices from the last 12 months
+    // Get invoices from the last 12 months (inclusive of current month)
     const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+    twelveMonthsAgo.setUTCMonth(twelveMonthsAgo.getUTCMonth() - 12);
 
     const invoices = await prisma.invoice.findMany({
       where: {
@@ -36,19 +36,27 @@ router.get('/', async (req, res) => {
       }
     });
 
-    // Group by month
+    // Prepare zero-filled last 12 months using UTC to avoid TZ drift
     const monthlyData = new Map<string, { amount: number; count: number }>();
+    const now = new Date();
+    const months: string[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      d.setUTCMonth(d.getUTCMonth() - i);
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      months.push(key);
+      monthlyData.set(key, { amount: 0, count: 0 });
+    }
 
+    // Group invoices by UTC month
     invoices.forEach((invoice: { issueDate: Date; total: number }) => {
-      const monthKey = `${invoice.issueDate.getFullYear()}-${String(invoice.issueDate.getMonth() + 1).padStart(2, '0')}`;
-      
-      if (!monthlyData.has(monthKey)) {
-        monthlyData.set(monthKey, { amount: 0, count: 0 });
+      const d = new Date(invoice.issueDate);
+      const monthKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      if (monthlyData.has(monthKey)) {
+        const data = monthlyData.get(monthKey)!;
+        data.amount += invoice.total;
+        data.count += 1;
       }
-      
-      const data = monthlyData.get(monthKey)!;
-      data.amount += invoice.total;
-      data.count += 1;
     });
 
     // Convert to array format for Chart.js
@@ -56,10 +64,10 @@ router.get('/', async (req, res) => {
     const amounts: number[] = [];
     const counts: number[] = [];
 
-    // Sort by date and format
-    Array.from(monthlyData.keys()).sort().forEach(monthKey => {
+    // Keep predefined chronological order and format labels
+    months.forEach(monthKey => {
       const [year, month] = monthKey.split('-');
-      const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+      const date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, 1));
       labels.push(date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }));
       
       const data = monthlyData.get(monthKey)!;
