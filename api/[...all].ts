@@ -13,8 +13,16 @@ try {
 const app = appModule?.default || appModule;
 
 // Export an explicit handler function for Vercel (@vercel/node) runtime
-export default function handler(req: any, res: any) {
+export default async function handler(req: any, res: any) {
   try {
+    // Direct health shortcut to validate function works even if app fails
+    if (req.url === '/api/health') {
+      res.setHeader('Content-Type', 'application/json');
+      res.statusCode = 200;
+      res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+      return;
+    }
+    // Delegate to Express app (Express apps are request handlers)
     return app(req, res);
   } catch (err: any) {
     res.statusCode = 500;
