@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/[...all].ts": {
+      "includeFiles": "apps/api/src/**"
+    }
+  },
   "routes": [
     { "src": "/((?!api)(?!.*\\.).*)", "dest": "/index.html" }
   ]
