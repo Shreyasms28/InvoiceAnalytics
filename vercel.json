@@ -1,0 +1,7 @@
+{
+  "routes": [
+    { "src": "/api/health", "dest": "apps/api/api/health.ts" },
+    { "src": "/api/(.*)", "dest": "apps/api/api/[...all].ts" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}
