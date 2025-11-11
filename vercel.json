@@ -1,7 +1,9 @@
 {
+  "buildCommand": "npm run build:all",
+  "outputDirectory": "dist/public",
   "functions": {
     "api/[...all].ts": {
-      "includeFiles": "apps/api/src/**"
+      "includeFiles": "apps/api/dist/**"
     }
   },
   "routes": [
