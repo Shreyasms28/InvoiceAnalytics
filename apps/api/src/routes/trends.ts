@@ -29,13 +29,14 @@ router.get('/', async (req, res) => {
 
     // Fetch invoices for the period (exclude cancelled)
     const fromDate = new Date(months[0].getFullYear(), months[0].getMonth(), 1);
+    type TrendInvoice = { id: string; total: number | any; issueDate: Date | string; dueDate: Date | string };
     const invoices = await prisma.invoice.findMany({
       where: {
         status: { not: 'cancelled' },
         [basisKey]: { gte: fromDate }
       },
       select: { id: true, total: true, issueDate: true, dueDate: true }
-    });
+    }) as TrendInvoice[];
 
     // Group by month key
     const sums: Record<string, { amount: number; count: number }> = {};
@@ -44,11 +45,11 @@ router.get('/', async (req, res) => {
       sums[key] = { amount: 0, count: 0 };
     });
 
-    invoices.forEach((inv) => {
+    invoices.forEach((inv: TrendInvoice) => {
       const d = basisKey === 'dueDate' ? new Date(inv.dueDate as any) : new Date(inv.issueDate as any);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
       if (sums[key]) {
-        sums[key].amount += Number(inv.total);
+        sums[key].amount += Number(inv.total as any);
         sums[key].count += 1;
       }
     });

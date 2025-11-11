@@ -29,24 +29,26 @@ router.get('/', async (_req, res) => {
     const rangeEnd = new Date(months[months.length - 1].getFullYear(), months[months.length - 1].getMonth() + 1, 1);
 
     // Fetch invoices due in range, excluding cancelled
+    type InvoiceDue = { id: string; total: number | any; dueDate: Date | string };
     const invoices = await prisma.invoice.findMany({
       where: {
         status: { not: 'cancelled' },
         dueDate: { gte: rangeStart, lt: rangeEnd }
       },
       select: { id: true, total: true, dueDate: true }
-    });
+    }) as InvoiceDue[];
 
     // Map of total paid per invoice
-    const invoiceIds = invoices.map(i => i.id);
-    let paidByInvoice = new Map<string, number>();
+    const invoiceIds = invoices.map((i: InvoiceDue) => i.id);
+    let paidByInvoice: Map<string, number> = new Map<string, number>();
     if (invoiceIds.length > 0) {
+      type PaymentSum = { invoiceId: string; amount: number | any };
       const payments = await prisma.payment.findMany({
         where: { invoiceId: { in: invoiceIds } },
         select: { invoiceId: true, amount: true }
-      });
-      paidByInvoice = payments.reduce((map, p) => {
-        map.set(p.invoiceId, (map.get(p.invoiceId) || 0) + Number(p.amount));
+      }) as PaymentSum[];
+      paidByInvoice = payments.reduce((map: Map<string, number>, p: PaymentSum) => {
+        map.set(p.invoiceId, (map.get(p.invoiceId) || 0) + Number(p.amount as any));
         return map;
       }, new Map<string, number>());
     }
@@ -58,11 +60,11 @@ router.get('/', async (_req, res) => {
     });
 
     // Sum remaining amounts per due month
-    invoices.forEach(inv => {
+    invoices.forEach((inv: InvoiceDue) => {
       const d = new Date(inv.dueDate as any);
       const key = `${d.getFullYear()}-${d.getMonth()}`;
       const paid = paidByInvoice.get(inv.id) || 0;
-      const remaining = Math.max(Number(inv.total) - paid, 0);
+      const remaining = Math.max(Number(inv.total as any) - paid, 0);
       if (key in totalsByKey) {
         totalsByKey[key] += remaining;
       }
