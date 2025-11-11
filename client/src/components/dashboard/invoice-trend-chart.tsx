@@ -22,6 +22,7 @@ import {
   Legend,
   Filler
 } from 'chart.js';
+import type { ChartOptions } from 'chart.js';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // Register Chart.js components
@@ -47,7 +48,7 @@ interface TrendData {
 
 export default function InvoiceTrendChart() {
   const { data, isLoading } = useQuery<TrendData>({
-    queryKey: ['/api/invoice-trends']
+    queryKey: ['/api/invoice-trends?basis=due']
   });
 
   if (isLoading) {
@@ -87,7 +88,7 @@ export default function InvoiceTrendChart() {
     ]
   };
 
-  const options = {
+  const options: ChartOptions<'line'> = {
     responsive: true,
     maintainAspectRatio: false, // Important: allows fixed height container
     interaction: {
@@ -118,7 +119,7 @@ export default function InvoiceTrendChart() {
         },
         titleFont: {
           family: 'Inter, system-ui, sans-serif',
-          weight: '600'
+          weight: 600
         }
       }
     },
@@ -128,7 +129,9 @@ export default function InvoiceTrendChart() {
         position: 'left' as const,
         grid: {
           color: 'hsl(var(--border))',
-          drawBorder: false
+        },
+        border: {
+          display: false
         },
         ticks: {
           callback: (value: any) => '$' + value.toLocaleString(),

@@ -26,7 +26,7 @@ router.get('/', async (_req, res) => {
       FROM months m
       LEFT JOIN "invoices" i
         ON date_trunc('month', i."dueDate") = m.month
-       AND i."status" IN ('pending','overdue')
+       AND i."status" <> 'cancelled'
       LEFT JOIN (
         SELECT "invoiceId", COALESCE(SUM("amount"),0) AS paid_amount
         FROM "payments"
