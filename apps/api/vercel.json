@@ -5,10 +5,7 @@
   ],
   "functions": {
     "api/**.ts": {
-      "includeFiles": [
-        "node_modules/.prisma/**",
-        "prisma/schema.prisma"
-      ]
+      "includeFiles": "node_modules/.prisma/**"
     }
   },
   "routes": [
