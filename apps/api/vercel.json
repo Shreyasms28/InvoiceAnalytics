@@ -1,7 +1,6 @@
 {
   "version": 2,
-  "installCommand": "npm install",
-  "buildCommand": "npm run build || echo Skipping build for serverless functions",
+  "installCommand": "npm install --include=dev",
   "functions": {
     "api/**.ts": {
       "includeFiles": "node_modules/.prisma/**"
