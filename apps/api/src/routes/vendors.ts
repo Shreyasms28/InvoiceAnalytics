@@ -9,10 +9,10 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get('/top10', async (req, res) => {
   try {
+    const prisma = new PrismaClient();
     // Get all invoices with vendor information
     const invoices = await prisma.invoice.findMany({
       where: {

@@ -10,10 +10,10 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get('/', async (_req, res) => {
   try {
+    const prisma = new PrismaClient();
     // Build next 6 months (including current), oldest -> newest
     const months: Date[] = [];
     const now = new Date();

@@ -10,10 +10,10 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get('/', async (req, res) => {
   try {
+    const prisma = new PrismaClient();
     // basis can be 'issue' (default) or 'due'
     const basisKey = (String(req.query.basis || 'issue').toLowerCase() === 'due') ? 'dueDate' : 'issueDate';
 
