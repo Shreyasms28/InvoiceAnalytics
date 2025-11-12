@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://your-api-project.vercel.app/api/$1" }
+    { "source": "/api/(.*)", "destination": "https://invoice-analytics-mauve.vercel.app/api/$1" }
   ]
 }

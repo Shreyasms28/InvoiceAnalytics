@@ -6,6 +6,9 @@
       "includeFiles": "apps/api/dist/**"
     }
   },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://invoice-analytics-mauve.vercel.app/api/$1" }
+  ],
   "routes": [
     { "src": "/((?!api)(?!.*\\.).*)", "dest": "/index.html" }
   ]
