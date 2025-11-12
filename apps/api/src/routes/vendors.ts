@@ -49,9 +49,11 @@ router.get('/top10', async (req, res) => {
       data: top10.map(v => Math.round(v.total * 100) / 100)
     });
   } catch (error) {
-    console.error('Error fetching top vendors:', error);
-    res.status(500).json({ error: 'Failed to fetch top vendors' });
+    console.error('Error fetching top vendors:', (error as any)?.message || error);
+    // Graceful fallback to avoid breaking UI
+    res.status(200).json({ labels: [], data: [] });
   }
 });
 
 export default router;
+
