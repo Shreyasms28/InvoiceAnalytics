@@ -142,19 +142,56 @@ async function main() {
             amount: Number(safeGet(li, ['totalPrice', 'value'], 0)) || 0,
           })) : [];
 
+          // Derive a realistic status and optional payments
+          const now = new Date();
+          let status: 'paid' | 'pending' | 'overdue' = 'pending';
+          const payments: Array<{ amount: number; paymentDate: string; method: string; reference?: string } > = [];
+
+          if (invoiceTotal > 0) {
+            if (dueDate < now) {
+              // Past due invoices: mostly paid, some overdue
+              if (Math.random() < 0.6) {
+                status = 'paid';
+                const paymentDate = new Date(dueDate.getTime() + Math.random() * (now.getTime() - dueDate.getTime()));
+                payments.push({
+                  amount: invoiceTotal,
+                  paymentDate: paymentDate.toISOString(),
+                  method: 'bank_transfer',
+                  reference: `PAY-${String(Math.floor(Math.random() * 100000)).padStart(5, '0')}`
+                });
+              } else {
+                status = 'overdue';
+              }
+            } else {
+              // Not yet due: some paid early, most pending
+              if (Math.random() < 0.2) {
+                status = 'paid';
+                const paymentDate = new Date(issueDate.getTime() + Math.random() * (dueDate.getTime() - issueDate.getTime()));
+                payments.push({
+                  amount: invoiceTotal,
+                  paymentDate: paymentDate.toISOString(),
+                  method: 'credit_card',
+                  reference: `PAY-${String(Math.floor(Math.random() * 100000)).padStart(5, '0')}`
+                });
+              } else {
+                status = 'pending';
+              }
+            }
+          }
+
           return {
             invoiceNumber: String(invoiceId),
             vendor: { name: vendorName, email: null },
             customer: { name: customerName, email: null },
             issueDate: issueDate.toISOString(),
             dueDate: dueDate.toISOString(),
-            status: 'pending',
+            status,
             subtotal: subTotal || mappedItems.reduce((s, it) => s + (it.amount || 0), 0),
             tax: totalTax,
             total: invoiceTotal,
             currency: 'EUR',
             lineItems: mappedItems,
-            payments: [],
+            payments,
           };
         });
       }
