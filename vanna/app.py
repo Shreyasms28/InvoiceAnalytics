@@ -145,7 +145,7 @@ async def generate_sql_with_groq(query: str) -> str:
                 "Content-Type": "application/json"
             },
             json={
-                "model": "llama-3.1-70b-versatile",
+                "model": "llama-3-70b-8192",
                 "messages": [
                     {"role": "system", "content": "You are a SQL expert that converts natural language to PostgreSQL queries."},
                     {"role": "user", "content": prompt}
