@@ -3,7 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://invoice-analytics-5lzs-git-main-shreyas-projects-96520dcb.vercel.app/api/$1" },
+    { "source": "/api/(.*)", "destination": "https://invoice-analytics-9ircnlcno-shreyas-projects-96520dcb.vercel.app/api/$1" },
     { "source": "/((?!api)(?!.*\\.).*)", "destination": "/index.html" }
   ]
 }
